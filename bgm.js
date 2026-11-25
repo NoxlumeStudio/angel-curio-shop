@@ -5,6 +5,15 @@ const BGM = (() => {
     ending_01:'assets/audio/bgm_ending_01.ogg', ending_02:'assets/audio/bgm_ending_02.ogg',
     ending_03:'assets/audio/bgm_ending_03.ogg', ending_04:'assets/audio/bgm_ending_04.ogg'
   });
+  const TRACK_GAIN = Object.freeze({
+    opening: 0.85,
+    shop: 1.0,
+    ending_01: 0.38,
+    ending_02: 0.84,
+    ending_03: 0.95,
+    ending_04: 0.78
+  });
+  const MAX_GAIN = 0.16;
   const SETTING_KEY = 'angel-curio-shop-bgm-settings-v1';
   let settings = {enabled:true, volume:25};
   try {
@@ -13,7 +22,12 @@ const BGM = (() => {
     if (Number.isFinite(saved?.volume)) settings.volume=Math.max(0,Math.min(100,saved.volume));
   } catch {}
   let audio=null, current=null, fade=null, blocked=false, runToken=0;
-  const level=()=>settings.enabled ? settings.volume/100 : 0;
+  const level=(key=current)=>{
+    if(!settings.enabled || settings.volume<=0)return 0;
+    const norm=Math.max(0,Math.min(1,settings.volume/100));
+    const track=TRACK_GAIN[key] ?? 1;
+    return Math.min(1,norm*norm*MAX_GAIN*track);
+  };
   function cancelFade(){if(fade!==null){clearInterval(fade);fade=null;}}
   function fadeTo(target,duration,whenDone){
     cancelFade();if(!audio){whenDone?.();return;}
@@ -46,7 +60,7 @@ const BGM = (() => {
       audio=new Audio(FILES[key]);audio.loop=(key==='shop');audio.volume=0;
       const token=++runToken;
       tryPlay(audio,token);
-      fadeTo(level(),800);
+      fadeTo(level(key),800);
     }catch{audio=null;}
   }
   function stop(duration=0){
@@ -57,8 +71,8 @@ const BGM = (() => {
     else{old.pause();audio=null;}
   }
   function saveSettings(){try{localStorage.setItem(SETTING_KEY,JSON.stringify(settings));}catch{}}
-  function setEnabled(enabled){settings.enabled=!!enabled;saveSettings();if(audio){cancelFade();if(settings.enabled){tryPlay(audio,runToken);fadeTo(level(),180);}else{audio.pause();audio.volume=0;}}}
-  function setVolume(value){settings.volume=Math.max(0,Math.min(100,Number(value)||0));saveSettings();if(audio){cancelFade();audio.volume=level();if(settings.enabled&&settings.volume>0&&blocked)tryPlay(audio,runToken);}}
+  function setEnabled(enabled){settings.enabled=!!enabled;saveSettings();if(audio){cancelFade();if(settings.enabled&&level()>0){tryPlay(audio,runToken);fadeTo(level(),180);}else{audio.pause();audio.volume=0;}}}
+  function setVolume(value){settings.volume=Math.max(0,Math.min(100,Number(value)||0));saveSettings();if(audio){cancelFade();const target=level();audio.volume=target;if(target<=0){audio.pause();}else if(settings.enabled&&(blocked||audio.paused)){tryPlay(audio,runToken);}}}
   function retry(){if(blocked&&audio)tryPlay(audio,runToken);}
-  return {play,stop,retry,setEnabled,setVolume,getSettings:()=>({...settings}),getCurrent:()=>current};
+  return {play,stop,retry,setEnabled,setVolume,getSettings:()=>({...settings}),getCurrent:()=>current,getGain:()=>level()};
 })();
